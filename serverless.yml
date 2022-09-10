@@ -1,0 +1,63 @@
+service: trial-customer-svcs
+
+custom:
+  tableName: 'customer-table-${self:provider.stage}'
+  bucketName: 'customer-email-attachments-${self:provider.stage}'
+
+provider:
+  name: aws
+  region: us-east-1
+  runtime: nodejs10.x
+  stage: dev
+  iamManagedPolicies:
+    - "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  iamRoleStatements:
+    # Allow to do all S3 operations
+    - Effect: Allow
+      Action: 
+        - s3:*
+      Resource: 
+        - { "Fn::GetAtt": ["AttachmentBucket", "Arn" ] }
+    # Allow to send email with ses
+    - Effect: Allow
+      Action: 
+        - ses:SendRawEmail
+        - ses:SendEmail
+      Resource: 
+        - "*"
+    # Allow to query and update the DynamoDB table
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource:
+        - { "Fn::GetAtt": ["CustomerTable", "Arn" ] }
+
+plugins:
+  - serverless-dynamodb-local
+  - serverless-offline
+
+functions:
+  fetchTrialUsers:
+    handler: handler.fetchTrialUsers
+    environment:
+      CUSTOMER_TABLE: ${self:custom.tableName}
+      ATTACHMENT_BUCKET: ${self:custom.bucketName}
+      ATTACHMENT_KEY: SignupOffer.pdf
+      FROM_EMAILID: antique2513@gmail.com
+    events:
+      # 10am every morning
+      - schedule: 
+          rate: cron(0 10 * * ? *)
+          #rate: cron(*/5 * * * ? *)
+          enabled: true
+
+resources:
+  # S3
+  - ${file(resources/s3-bucket.yml)}
+  # DynamoDB
+  - ${file(resources/dynamodb-table.yml)}
